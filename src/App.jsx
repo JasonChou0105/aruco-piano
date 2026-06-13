@@ -82,17 +82,58 @@ export default function App() {
     window.innerWidth > window.innerHeight,
   );
 
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  async function enterFullscreen() {
+    const app = appRef.current;
+    if (!app) return;
+
+    try {
+      if (app.requestFullscreen) {
+        await app.requestFullscreen();
+      } else if (app.webkitRequestFullscreen) {
+        await app.webkitRequestFullscreen();
+      }
+
+      if (screen.orientation && screen.orientation.lock) {
+        try {
+          await screen.orientation.lock("landscape");
+        } catch (err) {
+          console.warn("Could not lock orientation:", err);
+        }
+      }
+    } catch (err) {
+      console.error("Fullscreen error:", err);
+    }
+  }
+
   useEffect(() => {
     function checkOrientation() {
       setIsLandscape(window.innerWidth > window.innerHeight);
     }
 
+    function checkFullscreen() {
+      const fullscreenElement =
+        document.fullscreenElement || document.webkitFullscreenElement;
+
+      setIsFullscreen(Boolean(fullscreenElement));
+    }
+
     window.addEventListener("resize", checkOrientation);
     window.addEventListener("orientationchange", checkOrientation);
+
+    document.addEventListener("fullscreenchange", checkFullscreen);
+    document.addEventListener("webkitfullscreenchange", checkFullscreen);
+
+    checkOrientation();
+    checkFullscreen();
 
     return () => {
       window.removeEventListener("resize", checkOrientation);
       window.removeEventListener("orientationchange", checkOrientation);
+
+      document.removeEventListener("fullscreenchange", checkFullscreen);
+      document.removeEventListener("webkitfullscreenchange", checkFullscreen);
     };
   }, []);
 
@@ -168,10 +209,7 @@ export default function App() {
 
       const halfWidth = cssWidth / 2;
 
-      // Left eye
       drawVideoCover(ctx, video, 0, 0, halfWidth, cssHeight);
-
-      // Right eye
       drawVideoCover(ctx, video, halfWidth, 0, halfWidth, cssHeight);
 
       animationId = requestAnimationFrame(drawLoop);
@@ -243,12 +281,10 @@ export default function App() {
 
       renderer.clear();
 
-      // Left half
       renderer.setViewport(0, 0, halfWidth, height);
       renderer.setScissor(0, 0, halfWidth, height);
       renderer.render(scene, leftCamera);
 
-      // Right half
       renderer.setViewport(halfWidth, 0, halfWidth, height);
       renderer.setScissor(halfWidth, 0, halfWidth, height);
       renderer.render(scene, rightCamera);
@@ -278,6 +314,12 @@ export default function App() {
         <div className="rotate-warning">
           Rotate your phone sideways for AR glasses mode
         </div>
+      )}
+
+      {!isFullscreen && (
+        <button className="fullscreen-button" onClick={enterFullscreen}>
+          Enter Fullscreen
+        </button>
       )}
 
       <video
