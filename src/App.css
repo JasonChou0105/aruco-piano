@@ -5,38 +5,33 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
+  background: black;
 }
 
 .app {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
+  position: fixed;
+  inset: 0;
+  width: 100dvw;
+  height: 100dvh;
+  overflow: hidden;
   background: black;
 }
 
-.camera {
-  position: absolute;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  object-fit: contain;
-  background: black;
-}
-
-.three-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
+/* Do not use display: none. Some mobile browsers stop updating hidden videos. */
 .hidden-video {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .camera-canvas {
   position: absolute;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   background: black;
 }
 
@@ -44,4 +39,37 @@ body,
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+
+.three-layer canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.divider {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 100%;
+  transform: translateX(-1px);
+  background: rgba(255, 255, 255, 0.25);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.rotate-warning {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: white;
+  font-family: system-ui, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.85);
 }

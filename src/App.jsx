@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import "./App.css";
 
@@ -41,7 +41,7 @@ function drawVideoCover(ctx, video, x, y, width, height) {
   const videoWidth = video.videoWidth;
   const videoHeight = video.videoHeight;
 
-  if (!videoWidth || !videoHeight) return;
+  if (!videoWidth || !videoHeight || !width || !height) return;
 
   const videoRatio = videoWidth / videoHeight;
   const targetRatio = width / height;
@@ -76,6 +76,25 @@ export default function App() {
   const videoRef = useRef(null);
   const cameraCanvasRef = useRef(null);
   const threeRef = useRef(null);
+  const appRef = useRef(null);
+
+  const [isLandscape, setIsLandscape] = useState(
+    window.innerWidth > window.innerHeight,
+  );
+
+  useEffect(() => {
+    function checkOrientation() {
+      setIsLandscape(window.innerWidth > window.innerHeight);
+    }
+
+    window.addEventListener("resize", checkOrientation);
+    window.addEventListener("orientationchange", checkOrientation);
+
+    return () => {
+      window.removeEventListener("resize", checkOrientation);
+      window.removeEventListener("orientationchange", checkOrientation);
+    };
+  }, []);
 
   useEffect(() => {
     let stream = null;
@@ -95,6 +114,9 @@ export default function App() {
         if (cancelled || !videoRef.current) return;
 
         videoRef.current.srcObject = stream;
+        videoRef.current.muted = true;
+        videoRef.current.playsInline = true;
+
         await videoRef.current.play();
       } catch (err) {
         console.error("Camera error:", err);
@@ -115,24 +137,42 @@ export default function App() {
   useEffect(() => {
     const video = videoRef.current;
     const canvas = cameraCanvasRef.current;
+    const app = appRef.current;
 
-    if (!video || !canvas) return;
+    if (!video || !canvas || !app) return;
 
     const ctx = canvas.getContext("2d");
     let animationId;
 
     function drawLoop() {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      const halfWidth = width / 2;
+      const rect = app.getBoundingClientRect();
 
-      canvas.width = width;
-      canvas.height = height;
+      const cssWidth = rect.width;
+      const cssHeight = rect.height;
 
-      ctx.clearRect(0, 0, width, height);
+      const dpr = window.devicePixelRatio || 1;
 
-      drawVideoCover(ctx, video, 0, 0, halfWidth, height);
-      drawVideoCover(ctx, video, halfWidth, 0, halfWidth, height);
+      const canvasWidth = Math.floor(cssWidth * dpr);
+      const canvasHeight = Math.floor(cssHeight * dpr);
+
+      if (canvas.width !== canvasWidth || canvas.height !== canvasHeight) {
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+      }
+
+      canvas.style.width = `${cssWidth}px`;
+      canvas.style.height = `${cssHeight}px`;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+      const halfWidth = cssWidth / 2;
+
+      // Left eye
+      drawVideoCover(ctx, video, 0, 0, halfWidth, cssHeight);
+
+      // Right eye
+      drawVideoCover(ctx, video, halfWidth, 0, halfWidth, cssHeight);
 
       animationId = requestAnimationFrame(drawLoop);
     }
@@ -146,7 +186,9 @@ export default function App() {
 
   useEffect(() => {
     const container = threeRef.current;
-    if (!container) return;
+    const app = appRef.current;
+
+    if (!container || !app) return;
 
     let animationId;
 
@@ -157,14 +199,13 @@ export default function App() {
       antialias: true,
     });
 
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setScissorTest(true);
     renderer.setClearColor(0x000000, 0);
 
     container.appendChild(renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
     scene.add(ambientLight);
 
     const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
@@ -173,35 +214,26 @@ export default function App() {
 
     const piano = createPiano();
 
-    piano.position.set(0, -0.8, 0);
+    piano.position.set(0, -0.75, 0);
     piano.rotation.x = -0.4;
     piano.scale.set(1.2, 1.2, 1.2);
 
     scene.add(piano);
 
-    const leftCamera = new THREE.PerspectiveCamera(
-      60,
-      window.innerWidth / 2 / window.innerHeight,
-      0.01,
-      100,
-    );
-
-    const rightCamera = new THREE.PerspectiveCamera(
-      60,
-      window.innerWidth / 2 / window.innerHeight,
-      0.01,
-      100,
-    );
+    const leftCamera = new THREE.PerspectiveCamera(60, 1, 0.01, 100);
+    const rightCamera = new THREE.PerspectiveCamera(60, 1, 0.01, 100);
 
     leftCamera.position.set(-EYE_SEPARATION / 2, 0, 4);
     rightCamera.position.set(EYE_SEPARATION / 2, 0, 4);
 
     function renderStereo() {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
+      const rect = app.getBoundingClientRect();
+
+      const width = rect.width;
+      const height = rect.height;
       const halfWidth = width / 2;
 
-      renderer.clear();
+      renderer.setSize(width, height, false);
 
       leftCamera.aspect = halfWidth / height;
       rightCamera.aspect = halfWidth / height;
@@ -209,10 +241,14 @@ export default function App() {
       leftCamera.updateProjectionMatrix();
       rightCamera.updateProjectionMatrix();
 
+      renderer.clear();
+
+      // Left half
       renderer.setViewport(0, 0, halfWidth, height);
       renderer.setScissor(0, 0, halfWidth, height);
       renderer.render(scene, leftCamera);
 
+      // Right half
       renderer.setViewport(halfWidth, 0, halfWidth, height);
       renderer.setScissor(halfWidth, 0, halfWidth, height);
       renderer.render(scene, rightCamera);
@@ -225,15 +261,8 @@ export default function App() {
 
     animate();
 
-    function handleResize() {
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-
-    window.addEventListener("resize", handleResize);
-
     return () => {
       cancelAnimationFrame(animationId);
-      window.removeEventListener("resize", handleResize);
 
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
@@ -244,7 +273,13 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app">
+    <div ref={appRef} className="app">
+      {!isLandscape && (
+        <div className="rotate-warning">
+          Rotate your phone sideways for AR glasses mode
+        </div>
+      )}
+
       <video
         ref={videoRef}
         className="hidden-video"
@@ -254,6 +289,8 @@ export default function App() {
       />
 
       <canvas ref={cameraCanvasRef} className="camera-canvas" />
+
+      <div className="divider" />
 
       <div ref={threeRef} className="three-layer" />
     </div>
